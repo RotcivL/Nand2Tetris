@@ -64,7 +64,7 @@ class Parser:
         """
         returns the index for push and pop commands
         """
-        return self.curr_command.split(" ")[2]
+        return int(self.curr_command.split(" ")[2])
 
 
 class CodeWriter:
@@ -142,12 +142,13 @@ class CodeWriter:
         writes assembly instructions for push pop commands
         """
         asm_code = []
+        str_index = str(index)
         if command == "C_PUSH":
             if segment in ["local", "argument", "this", "that"]:
                 asm_code = [
                     self.segment_table[segment],
                     "D=M",
-                    "@" + index,
+                    "@" + str_index,
                     "A=A+D",
                     "D=M",
                 ]
@@ -155,24 +156,29 @@ class CodeWriter:
                 asm_code = [
                     self.segment_table[segment],
                     "D=A",
-                    "@" + index,
+                    "@" + str_index,
                     "A=A+D",
                     "D=M",
                 ]
             elif segment == "constant":
-                asm_code = ["@" + index, "D=A"]
+                asm_code = ["@" + str_index, "D=A"]
             elif segment == "static":
-                asm_code = ["@" + self.file_name + "." + index, "D=M"]
+                asm_code = ["@" + self.file_name + "." + str_index, "D=M"]
             asm_code += ["@SP", "AM=M+1", "A=A-1", "M=D"]
 
         elif command == "C_POP":
             if segment == "static":
-                asm_code += ["@" + self.file_name + "." + index, "D=M", "@R13", "M=D"]
+                asm_code += [
+                    "@" + self.file_name + "." + str_index,
+                    "D=A",
+                    "@R13",
+                    "M=D",
+                ]
             elif segment in ["local", "argument", "this", "that"]:
                 asm_code += [
                     self.segment_table[segment],
-                    "D=A",
-                    "@" + index,
+                    "D=M",
+                    "@" + str_index,
                     "D=A+D",
                     "@R13",
                     "M=D",
@@ -181,7 +187,7 @@ class CodeWriter:
                 asm_code += [
                     self.segment_table[segment],
                     "D=A",
-                    "@" + index,
+                    "@" + str_index,
                     "D=A+D",
                     "@R13",
                     "M=D",
