@@ -10,7 +10,7 @@ class Parser:
 
     def __init__(self, file_path):
         """
-        Opens file discarding empty and comment lines and stripping wehitespace.
+        Opens file discarding empty and comment lines and stripping whitespace.
         @param file_path(str): path to .vm file that is being translated to assembly
         """
         self.commands = []

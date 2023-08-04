@@ -2,12 +2,23 @@ import os
 import sys
 
 class JackTokens:
+    """
+    Class to represent tokens in Jack 
+    """
     def __init__(self, type, token):
         self.type = type
         self.token = token
     
 class JackTokenizer:
+    """
+    Converts jack code into a stream of individual jack tokens
+    JackTokenizer as recommended in Nand2Tetris chapter 10
+    """
     def __init__(self, file):
+        """
+        Opens jack file for reading, tokenizing jack code
+        @param file(str): path to .jack file that is being converted to tokens
+        """
         self.symbols = ['(', ')', '[', ']', '{', '}',
                         ',', ';', '=', '.', 
                         '+', '-', '*', '/', '&', '|', '~', '<', '>']
@@ -38,6 +49,10 @@ class JackTokenizer:
         self.current_token = None
     
     def processLine(self, line):
+        """
+        parses line to not split strings in quotations
+        splits line by whitespace to get preliminary set of tokens (some will need to be further split)
+        """
         if '\"' in line:
             start = line.find('\"')
             end = line.find('\"', start+1)
@@ -51,6 +66,9 @@ class JackTokenizer:
                 self.tokenize(string)
 
     def tokenize(self, string):
+        """
+        parse preliminary set of tokens, assigning them to jack tokens (with type)
+        """
         if not string:
             return
         
@@ -79,13 +97,22 @@ class JackTokenizer:
 
         
     def hasMoreTokens(self):
+        """
+        checks to see if tokenizer has reached last token
+        """
         return self.current_pos < len(self.tokens) - 1
 
     def advance(self):
+        """
+        move current token to next token
+        """
         self.current_pos += 1
         self.current_token = self.tokens[self.current_pos]
 
     def tokenType(self):
+        """
+        returns the jack type of token
+        """
         return self.current_token.type
 
     def keyWord(self):
@@ -104,7 +131,15 @@ class JackTokenizer:
         return self.current_token.token
 
 class CompliationEngine:
+    """
+    Outputs a structured representation of input jack code in XML.
+    CompilationEngine as recommended in Nand2Tetris chapter 10
+    """
     def __init__(self, file):
+        """
+        Instantiates the tokenizer to get a stream of jack tokens.
+        @param file(str): path to .jack file that is being converted to tokens
+        """
         self.tokenizer = JackTokenizer(file) 
         self.indentation = 0
         self.classVarDec = ['static', 'field']
@@ -112,116 +147,125 @@ class CompliationEngine:
         self.op = ['+', '-', '*', '/', '&', '|', '<', '>', '=']
         self.unary = ['~', '-']
         self.XMLentity = {'<':'&lt;', '>':'&gt;', '&':'&amp;', '"':'&quot;'}
-        self.file = open(file[:-5] + "Compile.xml", "w")
+        self.file = open(file[:-5] + "Compile2.xml", "w")
         
     def compileClass(self):
+        """
+        Compiles a complete class
+        """
         self.file.write('<class>\n')
         self.indentation += 1
         self.tokenizer.advance() 
-        self.writeXML() # class
+        self._writeXML() # class
         self.tokenizer.advance() 
-        self.writeXML() # className
+        self._writeXML() # className
         self.tokenizer.advance() 
-        self.writeXML() # {
-        # classVar or subroutine
+        self._writeXML() # {
         self.tokenizer.advance()
-        while self.tokenizer.keyWord() in self.classVarDec:
-            self.compileClassVarDec()
-        while self.tokenizer.keyWord() in self.subroutineDec:
-            self.compileSubroutine()
-        
-        self.writeXML() # }
+        self.compileClassVarDec()
+        self.compileSubroutine()
+        self._writeXML() # }
         self.indentation -= 1
         self.file.write('</class>\n')
         self.file.close()
 
     def compileClassVarDec(self):
+        """
+        compiles class variable declarationa
+        runs recursively until all class variable declarations have been compiled
+        """
+        if self.tokenizer.keyWord() not in self.classVarDec:
+            return
         self.file.write('  ' * self.indentation + '<classVarDec>\n')
         self.indentation += 1
-        self.writeXML() # static | field 
+        self._writeXML() # static | field 
         self.tokenizer.advance() 
-        self.writeXML() # type
-        self.tokenizer.advance() 
-        self.writeXML() # varName
-        self.tokenizer.advance()
-        while self.tokenizer.symbol() == ',':
-            self.writeXML() # ,
-            self.tokenizer.advance() 
-            self.writeXML() # varName
-            self.tokenizer.advance()
-        self.writeXML() # ;
+        self._varDec()
         self.tokenizer.advance()
         self.indentation -= 1
         self.file.write('  ' * self.indentation + '</classVarDec>\n')
-
+        self.compileClassVarDec()
 
     def compileSubroutine(self):
+        """
+        compiles a complete method, function or constructor 
+        runs recursively until all subroutines have been compiled
+        """
+        if self.tokenizer.keyWord() not in self.subroutineDec:
+            return
         self.file.write('  ' * self.indentation + '<subroutineDec>\n')
         self.indentation += 1
-        self.writeXML() # constructor | function | method
+        self._writeXML() # constructor | function | method
         self.tokenizer.advance()
-        self.writeXML() # type
+        self._writeXML() # ('void' | type)
         self.tokenizer.advance()
-        self.writeXML() # subroutineName
+        self._writeXML() # subroutineName
         self.tokenizer.advance()
-        self.writeXML() # (
-        self.compileParameterList()
-        self.writeXML() # )
+        self._writeXML() # (
+        self.tokenizer.advance()
+        self.compileParameterList() # tokenizer advances until )
+        self._writeXML() # )
+        self.tokenizer.advance()
         self.compileSubroutineBody()
         self.tokenizer.advance()
         self.indentation -= 1
         self.file.write('  ' * self.indentation + '</subroutineDec>\n')
-
+        self.compileSubroutine()
 
     def compileParameterList(self):
+        """
+        compiles a (possibly empty) parameter list
+        does not handle enclosing ( and )
+        """
         self.file.write('  ' * self.indentation + '<parameterList>\n')
         self.indentation += 1
-        self.tokenizer.advance()
         while self.tokenizer.tokenType() != 'SYMBOL':
-            self.writeXML() # type
+            self._writeXML() # type
             self.tokenizer.advance()
-            self.writeXML() # varName
+            self._writeXML() # varName
             self.tokenizer.advance()
             if self.tokenizer.symbol() == ',':
-                self.writeXML() # ,
+                self._writeXML() # ,
                 self.tokenizer.advance() 
         self.indentation -= 1
         self.file.write('  ' * self.indentation + '</parameterList>\n')
 
     def compileSubroutineBody(self):
+        """
+        compiles a subroutine's body
+        """
         self.file.write('  ' * self.indentation + '<subroutineBody>\n')
         self.indentation += 1
+        self._writeXML() # {
         self.tokenizer.advance()
-        self.writeXML() # {
-        self.tokenizer.advance()
-        while self.tokenizer.keyWord() == 'var':
-            self.compileVarDec()
-
+        self.compileVarDec()
         self.compileStatements()
-        self.writeXML() # }
+        self._writeXML() # }
         self.indentation -= 1
         self.file.write('  ' * self.indentation + '</subroutineBody>\n')
 
     def compileVarDec(self):
+        """
+        compiles variable declarations 
+        runs recursively until all variable declarations in subroutine have been compiled
+        """
+        if self.tokenizer.tokenType() != 'KEYWORD' or self.tokenizer.keyWord() != 'var':
+            return
         self.file.write('  ' * self.indentation + '<varDec>\n')
         self.indentation += 1
-        self.writeXML() # var
+        self._writeXML() # var
         self.tokenizer.advance() 
-        self.writeXML() # type
-        self.tokenizer.advance() 
-        self.writeXML() # varName
-        self.tokenizer.advance()
-        while self.tokenizer.symbol() == ',':
-            self.writeXML() # ,
-            self.tokenizer.advance() 
-            self.writeXML() # varName
-            self.tokenizer.advance()
-        self.writeXML() # ;
+        self._varDec()
         self.tokenizer.advance()
         self.indentation -= 1
-        self.file.write('  ' * self.indentation + '</varDec>\n')        
+        self.file.write('  ' * self.indentation + '</varDec>\n')
+        self.compileVarDec()        
 
     def compileStatements(self):
+        """
+        compiles a sequence of statments
+        does not handle enclosing { and }
+        """
         self.file.write('  ' * self.indentation + '<statements>\n')
         self.indentation += 1
         while self.tokenizer.tokenType() == 'KEYWORD':
@@ -239,174 +283,217 @@ class CompliationEngine:
         self.file.write('  ' * self.indentation + '</statements>\n')
 
     def compilelet(self):
+        """
+        compiles a let statement
+        """
         self.file.write('  ' * self.indentation + '<letStatement>\n')
         self.indentation += 1
-        self.writeXML() # let
+        self._writeXML() # let
         self.tokenizer.advance()
-        self.writeXML() # varName
+        self._writeXML() # varName
         self.tokenizer.advance()
         if self.tokenizer.symbol() == '[':
-            self.writeXML() # [
+            self._writeXML() # [
             self.tokenizer.advance()
             self.compileExpression()
-            self.writeXML() # ]
+            self._writeXML() # ]
             self.tokenizer.advance()
-        self.writeXML() # =
+        self._writeXML() # =
         self.tokenizer.advance()
         self.compileExpression()
-        self.writeXML() # ;
+        self._writeXML() # ;
         self.tokenizer.advance()
         self.indentation -= 1
         self.file.write('  ' * self.indentation + '</letStatement>\n')
 
 
     def compileIf(self):
+        """
+        compiles a if statement with a possible trailing else clause
+        """
         self.file.write('  ' * self.indentation + '<ifStatement>\n')
         self.indentation += 1
-        self.writeXML() # if
+        self._writeXML() # if
         self.tokenizer.advance()
-        self.writeXML() # (
+        self._writeXML() # (
         self.tokenizer.advance()
         self.compileExpression()
-        self.writeXML() # )
+        self._writeXML() # )
         self.tokenizer.advance()
-        self.writeXML() # {
+        self._writeXML() # {
         self.tokenizer.advance()
         self.compileStatements()
-        self.writeXML() # }
+        self._writeXML() # }
         self.tokenizer.advance()
         if self.tokenizer.tokenType() == 'KEYWORD' and self.tokenizer.keyWord() == 'else':
-            self.writeXML() # else
+            self._writeXML() # else
             self.tokenizer.advance()
-            self.writeXML() # {
+            self._writeXML() # {
             self.tokenizer.advance()
             self.compileStatements()
-            self.writeXML() # }
+            self._writeXML() # }
             self.tokenizer.advance()
         self.indentation -= 1
         self.file.write('  ' * self.indentation + '</ifStatement>\n')
 
     def compileWhile(self):
+        """
+        compiles a while statement
+        """
         self.file.write('  ' * self.indentation + '<whileStatement>\n')
         self.indentation += 1
-        self.writeXML() # while
+        self._writeXML() # while
         self.tokenizer.advance()
-        self.writeXML() # (
+        self._writeXML() # (
         self.tokenizer.advance()
         self.compileExpression()
-        self.writeXML() # )
+        self._writeXML() # )
         self.tokenizer.advance()
-        self.writeXML() # {
+        self._writeXML() # {
         self.tokenizer.advance()
         self.compileStatements()
-        self.writeXML() # }
+        self._writeXML() # }
         self.tokenizer.advance()
         self.indentation -= 1
         self.file.write('  ' * self.indentation + '</whileStatement>\n')        
 
     def compileDo(self):
+        """
+        compiles a do statement
+        """
         self.file.write('  ' * self.indentation + '<doStatement>\n')
         self.indentation += 1
-        self.writeXML() # do
+        self._writeXML() # do
         self.tokenizer.advance()
         # subroutinecall
-        self.writeXML() # subroutineName | (className | varName)
+        self._writeXML() # subroutineName | (className | varName)
         self.tokenizer.advance()
         if self.tokenizer.tokenType() == 'SYMBOL' and self.tokenizer.symbol() == '.':
-            self.writeXML() # .
+            self._writeXML() # .
             self.tokenizer.advance()
-            self.writeXML() # subroutineName
+            self._writeXML() # subroutineName
             self.tokenizer.advance()
-        self.writeXML() # (
+        self._writeXML() # (
         self.tokenizer.advance()
         self.compileExpressionList()
-        self.writeXML() # )
+        self._writeXML() # )
         self.tokenizer.advance()
-        self.writeXML() # ;
+        self._writeXML() # ;
         self.tokenizer.advance()
         self.indentation -= 1
         self.file.write('  ' * self.indentation + '</doStatement>\n')       
     
     def compileReturn(self):
+        """
+        compiles a return statmement
+        """
         self.file.write('  ' * self.indentation + '<returnStatement>\n')
         self.indentation += 1
-        self.writeXML() # return
+        self._writeXML() # return
         self.tokenizer.advance()
         if self.tokenizer.tokenType != 'SYMBOL' and self.tokenizer.symbol() != ';':
             self.compileExpression()
-        self.writeXML() # ;
+        self._writeXML() # ;
         self.tokenizer.advance()
         self.indentation -= 1
         self.file.write('  ' * self.indentation + '</returnStatement>\n')        
 
     def compileExpression(self):
+        """
+        compiles an expression
+        """
         self.file.write('  ' * self.indentation + '<expression>\n')
         self.indentation += 1
         self.compileTerm()
         while self.tokenizer.tokenType() == 'SYMBOL' and self.tokenizer.symbol() in self.op:
-            self.writeXML() # op
+            self._writeXML() # op
             self.tokenizer.advance()
             self.compileTerm()
-        
         self.indentation -= 1
         self.file.write('  ' * self.indentation + '</expression>\n')
 
     def compileTerm(self):
+        """
+        compiles a term
+        If current token is an identifer, a single lookahead token [ ( .  is required 
+        to distinguish possibilites.
+        """
         self.file.write('  ' * self.indentation + '<term>\n')
         self.indentation += 1
 
         if self.tokenizer.tokenType() == 'SYMBOL':
             if self.tokenizer.symbol() == '(':
-                self.writeXML() # (
+                self._writeXML() # (
                 self.tokenizer.advance()
                 self.compileExpression()
-                self.writeXML() # )
+                self._writeXML() # )
                 self.tokenizer.advance()
             elif self.tokenizer.symbol() in self.unary:
-                self.writeXML() # unary
+                self._writeXML() # unary
                 self.tokenizer.advance()
                 self.compileTerm()
         
         elif self.tokenizer.tokenType() != 'IDENTIFIER':
-            self.writeXML() # keyword | stringConst | intConst
+            self._writeXML() # keyword | stringConst | intConst
             self.tokenizer.advance()
         
         else:
-            self.writeXML() # identifier
+            self._writeXML() # identifier
             self.tokenizer.advance()
             if self.tokenizer.symbol() == '[':
-                self.writeXML() # [
+                self._writeXML() # [
                 self.tokenizer.advance()
                 self.compileExpression()
-                self.writeXML() # ]
+                self._writeXML() # ]
                 self.tokenizer.advance()
             elif self.tokenizer.symbol() == '.':
-                self.writeXML() # .
+                self._writeXML() # .
                 self.tokenizer.advance()
-                self.writeXML() # subroutineName
+                self._writeXML() # subroutineName
                 self.tokenizer.advance()
             if self.tokenizer.symbol() == '(':
-                self.writeXML() # (
+                self._writeXML() # (
                 self.tokenizer.advance()
                 self.compileExpressionList()
-                self.writeXML() # )
+                self._writeXML() # )
                 self.tokenizer.advance()
         self.indentation -= 1
         self.file.write('  ' * self.indentation + '</term>\n')
 
     def compileExpressionList(self):
+        """
+        compiles a (possibly empty) list of expressions.
+        """
         self.file.write('  ' * self.indentation + '<expressionList>\n')
         self.indentation += 1
         
         while self.tokenizer.tokenType() != 'SYMBOL' or self.tokenizer.symbol() != ')':
             self.compileExpression()
             if self.tokenizer.symbol() == ',':
-                self.writeXML() # ,
+                self._writeXML() # ,
                 self.tokenizer.advance() 
         self.indentation -= 1
         self.file.write('  ' * self.indentation + '</expressionList>\n')        
 
-    def writeXML(self):
+    def _varDec(self):
+        """
+        helper function for use in both varaible declaration functions
+        """
+        self._writeXML() # type
+        self.tokenizer.advance() 
+        self._writeXML() # varName
+        self.tokenizer.advance()
+        while self.tokenizer.symbol() == ',':
+            self._writeXML() # ,
+            self.tokenizer.advance() 
+            self._writeXML() # varName
+            self.tokenizer.advance()
+        self._writeXML() # ;
+
+    def _writeXML(self):
+        """
+        writes the XML representation of the current token
+        """
         tag = None
         token = None
         if self.tokenizer.tokenType() == 'KEYWORD':
@@ -426,13 +513,15 @@ class CompliationEngine:
         elif self.tokenizer.tokenType()  == 'STRING_CONST':
             tag = 'stringConstant'
             token = self.tokenizer.stringVal()
-
         self.file.write('  ' * self.indentation + '<'+tag+'> '+token+' </'+tag+'>\n')    
 
 def main():
+    """
+    Syntax analyzer for Jack code
+    main program to set up other modules
+    """
     files = []
     path = sys.argv[1]
-    xml_file_name = None
     # check if it is a file
     if os.path.isfile(path):
         ext = path[-5:]
@@ -441,11 +530,9 @@ def main():
     # check if it is a directory
     elif os.path.isdir(path):
         for file in os.listdir(path):
-            # store all vm files to be parsed
+            # store all .jack files to be parsed
             if file[-5:] == ".jack":
                 files.append(os.path.join(path, file))
-        # get the directory base name to be used as the asm file name
-        path = path[:-1] if path[-1] == "/" else path
 
     for file in files:
         compiler = CompliationEngine(file)
